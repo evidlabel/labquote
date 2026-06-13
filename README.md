@@ -8,6 +8,12 @@ YAML file with **namespaced keys**, as produced by [`evid`](https://github.com/e
 The bibliography is Typst-native compatible: the same `refs.yml` also works with
 `#bibliography("refs.yml", style: "chicago-author-date")`.
 
+<p align="center">
+  <img src="preview.png" alt="labquote rendered output: block quotes in bracket, box, and fill styles with inline cites and a legal Id. back-reference" width="520">
+</p>
+
+*Verbatim quotes carry their attribution and a clickable `[d, q]` cite; the grouped References page collects each quote under its source.*
+
 ## Namespaced keys
 
 `evid` emits keys of the form `<doc>:<slug>`, e.g. `0001:dolor`. Keys sharing a
