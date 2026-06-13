@@ -19,24 +19,18 @@
 
 = Lorem ipsum — example
 
-#lorem(24) #cite-ref("0001:dolor"):
+#lorem(12) #cite-ref("0001:dolor"):
 
 #blockq("0001:dolor", start: "Ut enim ad minim", end: "commodo consequat.")
 
-#lorem(20) #cite-ref("0001:amet"):
+#lorem(10) #cite-ref("0001:amet"):
 
 #blockq("0001:amet", style: "box")
 
-#lorem(28) #cite-ref("0002:perspiciatis"):
+#lorem(12) #cite-ref("0002:perspiciatis"):
 
 #blockq("0002:perspiciatis", start: "totam rem aperiam", end: "dicta sunt explicabo.", style: "fill")
 
-#lorem(14) — see #id(pin: "p. 8").
+#lorem(8) — see #id(pin: "p. 8"). Inline quote: #q("0001:amet", start: "Excepteur sint", end: "non proident", pin: "p. 2")
 
-#lorem(26) #cite-ref("0003:elit"):
-
-#blockq("0003:elit")
-
-Inline quote: #q("0001:amet", start: "Excepteur sint", end: "non proident", pin: "p. 2")
-
-#bibliography-custom()
+#bibliography-custom(new-page: false)

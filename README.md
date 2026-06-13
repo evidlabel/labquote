@@ -54,7 +54,7 @@ Legal back-reference to the last cite: #id(pin: "¶ 4").
   - `"fill"` — filled background panel, attribution top-right.
 - `cite-ref(key, pin: …)` — bare inline `[d, q]` cite, clickable to the bibliography.
 - `id(pin: …)` — legal `Id.`, auto-tracking the most recent cite.
-- `bibliography-custom(brief: false)` — styled References back page, grouping quotes under their source and italicising the slices actually quoted in the text. Pass `brief: true` to keep the document (`d`) entries but list the quote (`q`) items as a compact inline row of clickable markers (with pins), without repeating each quote's text.
+- `bibliography-custom(brief: false, new-page: true)` — styled References back page, grouping quotes under their source and italicising the slices actually quoted in the text. Pass `brief: true` to keep the document (`d`) entries but list the quote (`q`) items as a compact inline row of clickable markers (with pins), without repeating each quote's text. Pass `new-page: false` to drop the leading page break so the references flow directly after the body (used in `template/main.typ` to keep the demo on one page).
 
 ## Local install
 

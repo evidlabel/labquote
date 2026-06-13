@@ -524,9 +524,9 @@
 
 // brief: keep the document (d) entries, but list quote (q) items inline as a
 // compact row of clickable markers (with pins) instead of repeating each quote.
-#let bibliography-custom(brief: false) = context {
+#let bibliography-custom(brief: false, new-page: true) = context {
   let store = _store.get()
-  pagebreak(weak: true)
+  if new-page { pagebreak(weak: true) }
   heading(level: 1, numbering: none)[References]
   v(0.3em)
   line(length: 4em, stroke: 0.6pt + black)
