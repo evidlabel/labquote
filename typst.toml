@@ -1,0 +1,17 @@
+[package]
+name = "labquote"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["evidlabel"]
+license = "MIT"
+description = "Classical, legal, and scientific quotations from Hayagriva YAML"
+repository = "https://github.com/evidlabel/labquote"
+keywords = ["bibliography", "citation", "quotation", "hayagriva", "legal"]
+categories = ["utility"]
+exclude = ["template/main.pdf", "template/preview.sh", "template/preview.png", "local_install.sh", ".claude"]
+
+
+[template]
+path = "template"
+entrypoint = "main.typ"
+thumbnail = "preview.png"
