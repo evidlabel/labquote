@@ -11,7 +11,7 @@
 // ---------- REGISTER SOURCES ----------
 // Pick one:
 // #setup-bib(read("refs.bib"))
-#setup(yaml("refs.yml"), blockquote-indent: 1em)
+#setup(yaml("refs.yml"), blockquote-indent: 1em, cite-style: "short")
 
 // =============================================================
 // DEMO

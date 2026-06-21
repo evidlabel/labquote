@@ -5,11 +5,18 @@
 // usage:
 //   #import "@preview/labquote:0.1.0": *
 //   #setup(yaml("refs.yml"))            // hayagriva YAML
+//   #setup(yaml("refs.yml"), cite-brief: true)  // [d1,2] instead of [d1, q2]
 //   // or: #setup-bib(read("refs.bib")) // biblatex
+//
+// numbering: d/q indices are assigned in ORDER OF APPEARANCE in the rendered
+//   text (first cite-ref/q/blockq of a doc → d1, next new doc → d2, …); the
+//   bibliography is ordered to match. Uncited entries (if any) follow in file
+//   order. Never hand-assign d/q numbers.
 //
 //   #q("key", pin: "p. 42")[exact text]
 //   #blockq("key", pin: "¶ 17")[body]
 //   #cite-ref("key", pin: "…")          bare inline cite
+//   #multicite(("k1","k2"))             several cites in one bracket: [1a,1b]
 //   #id(pin: "…")                       legal Id. (auto-tracks last cite)
 //   #bibliography-custom()              styled back-page
 //
@@ -157,8 +164,11 @@
   out
 }
 
-// ---------- DOC/QUOTE INDEX MAPS ----------
-// Computed from sources insertion order (= bib file order).
+// ---------- DOC/QUOTE INDEX MAPS (LEGACY, file order) ----------
+// Kept for backward compatibility only. Displayed d/q numbers are now assigned
+// in ORDER OF APPEARANCE (see _doc-index-map / _quote-index-map and the
+// _cited-docs / _cited-quotes state below); these file-order maps are no longer
+// read for rendering.
 // doc index per prefix (e.g. "0088" → 1, "0115" → 2)
 // quote index per non-:main key, scoped to its prefix
 #let _compute-doc-indices(sources) = {
@@ -188,16 +198,58 @@
   out
 }
 
+// ---------- ORDER-OF-APPEARANCE INDEX MAPS ----------
+// d/q numbers follow first appearance in the rendered text (cite-ref/q/blockq),
+// not bib file order. `appeared` is the accumulated list of prefixes (docs) or
+// keys (quotes) in citation order; any store entries never cited are appended
+// afterwards in file order so the bibliography still numbers them stably.
+#let _doc-index-map(store, appeared) = {
+  let out = (:)
+  let i = 1
+  for prefix in appeared {
+    if prefix not in out { out.insert(prefix, i); i += 1 }
+  }
+  for k in store.sources.keys() {
+    let prefix = k.split(":").at(0)
+    if prefix not in out { out.insert(prefix, i); i += 1 }
+  }
+  out
+}
+#let _quote-index-map(store, appeared) = {
+  let out = (:)
+  let counters = (:)
+  for k in appeared {
+    if k not in out {
+      let prefix = k.split(":").at(0)
+      let n = counters.at(prefix, default: 0) + 1
+      counters.insert(prefix, n)
+      out.insert(k, n)
+    }
+  }
+  for k in store.sources.keys() {
+    let parts = k.split(":")
+    if parts.len() > 1 and parts.at(1) != "main" and k not in out {
+      let prefix = parts.at(0)
+      let n = counters.at(prefix, default: 0) + 1
+      counters.insert(prefix, n)
+      out.insert(k, n)
+    }
+  }
+  out
+}
+
 // ---------- STORE + SETUP ----------
 // Single state holding normalised sources and their precomputed index maps.
 #let _store = state("labquote-store", none)
 
-#let _build(sources, blockquote-indent, blockquote-style) = (
+#let _build(sources, blockquote-indent, blockquote-style, cite-brief, cite-style) = (
   sources: sources,
   doc-indices: _compute-doc-indices(sources),
   quote-indices: _compute-quote-indices(sources),
   blockquote-indent: blockquote-indent,
   blockquote-style: blockquote-style,
+  cite-brief: cite-brief,
+  cite-style: cite-style,
 )
 
 // Public: register the bibliography. Call once, near the top of the document,
@@ -206,8 +258,13 @@
 // blockquote-style: default look for block quotes — "bracket" (top + left rule,
 //   the default), "box" (full border), or "fill" (filled background). Each
 //   #blockq call may override with its own `style:` argument.
-#let setup(data, blockquote-indent: 1em, blockquote-style: "bracket") = _store.update(_build(_normalize-hayagriva(data), blockquote-indent, blockquote-style))
-#let setup-bib(src, blockquote-indent: 1em, blockquote-style: "bracket") = _store.update(_build(_normalize-bib(src), blockquote-indent, blockquote-style))
+// cite-style: inline cite format —
+//   "full"  → [d1, q2]   (default)
+//   "brief" → [d1,2]
+//   "short" → [1b]       (doc number + quote letter; bibliography markers follow)
+//   left as `auto`, it follows the legacy `cite-brief` boolean ("brief"/"full").
+#let setup(data, blockquote-indent: 1em, blockquote-style: "bracket", cite-brief: false, cite-style: auto) = _store.update(_build(_normalize-hayagriva(data), blockquote-indent, blockquote-style, cite-brief, cite-style))
+#let setup-bib(src, blockquote-indent: 1em, blockquote-style: "bracket", cite-brief: false, cite-style: auto) = _store.update(_build(_normalize-bib(src), blockquote-indent, blockquote-style, cite-brief, cite-style))
 
 // ---------- INTERNALS ----------
 #let _last-name(author) = {
@@ -216,15 +273,43 @@
 }
 #let _last-cite = state("_last-cite-key", none)
 
-// Format key as "d1, q2" content (or "d1" for :main / un-indexed).
+// Accumulated first-appearance order of cited docs (prefixes) and quotes (keys).
+#let _cited-docs = state("labquote-cited-docs", ())
+#let _cited-quotes = state("labquote-cited-quotes", ())
+// Record a cite at its point of appearance (append-if-absent → stable order).
+#let _register(key) = {
+  let parts = key.split(":")
+  let prefix = parts.at(0)
+  _cited-docs.update(d => if prefix in d { d } else { d + (prefix,) })
+  if parts.len() > 1 and parts.at(1) != "main" {
+    _cited-quotes.update(q => if key in q { q } else { q + (key,) })
+  }
+}
+
+// Resolve the effective inline cite style: explicit cite-style wins; else the
+// legacy cite-brief boolean ("brief"/"full").
+#let _resolve-style(store) = {
+  let s = store.at("cite-style", default: auto)
+  if s != auto { return s }
+  if store.at("cite-brief", default: false) { "brief" } else { "full" }
+}
+
+// Format key as bracket-free cite content per style (no surrounding [ ]):
+//   full  → "d1, q2"   brief → "d1,2"   short → "1b"   (:main / un-indexed → "d1" / "1")
+// Indices follow order of appearance. Call inside a context (reads .final()).
 #let _dq(store, key) = {
   let prefix = key.split(":").at(0)
-  let d = store.doc-indices.at(prefix)
-  if key in store.quote-indices {
-    let q-i = store.quote-indices.at(key)
-    [d#d, q#q-i]
+  let di = _doc-index-map(store, _cited-docs.final())
+  let d = di.at(prefix)
+  let qi = _quote-index-map(store, _cited-quotes.final())
+  let style = _resolve-style(store)
+  let has-q = key in qi
+  if style == "short" {
+    if has-q { [#d#numbering("a", qi.at(key))] } else { [#d] }
+  } else if style == "brief" {
+    if has-q { [d#d,#(qi.at(key))] } else { [d#d] }
   } else {
-    [d#d]
+    if has-q { [d#d, q#(qi.at(key))] } else { [d#d] }
   }
 }
 
@@ -239,9 +324,27 @@
 // pin (if explicitly passed) appended: [d1, q2: pin]
 #let cite-ref(key, pin: none) = {
   _last-cite.update(key)
+  _register(key)
   context {
     let store = _store.get()
     link(label(key))[#text(size: 0.85em, tracking: 0.02em)[\[#_dq(store, key)#if pin != none [: #pin]\]]]
+  }
+}
+
+// ---------- MULTI CITATION ----------
+// One pair of brackets around several cites: [1a,1b,2a] (short), or
+// [d1, q1; d2, q1] in full/brief. Each token links to its own bib anchor.
+// `keys`: an array of keys, e.g. #multicite(("0157:a", "0157:b", "0301:a")).
+#let multicite(keys, pin: none) = {
+  for k in keys { _register(k) }
+  if keys.len() > 0 { _last-cite.update(keys.last()) }
+  context {
+    let store = _store.get()
+    // short style is unambiguous with "," ; full/brief tokens already contain
+    // commas, so separate those with "; " instead.
+    let sep = if _resolve-style(store) == "short" { "," } else { "; " }
+    let toks = keys.map(k => link(label(k))[#_dq(store, k)])
+    text(size: 0.85em, tracking: 0.02em)[\[#toks.join(sep)#if pin != none [: #pin]\]]
   }
 }
 
@@ -418,6 +521,7 @@
 #let blockq(key, ..args) = {
   _record-slice(key, args.named().at("start", default: none), args.named().at("end", default: none))
   _last-cite.update(key)
+  _register(key)
   let pin = args.named().at("pin", default: none)
   context {
     let store = _store.get()
@@ -524,17 +628,32 @@
 
 // brief: keep the document (d) entries, but list quote (q) items inline as a
 // compact row of clickable markers (with pins) instead of repeating each quote.
-#let bibliography-custom(brief: false, new-page: true) = context {
+// Localised bibliography heading by document language (text.lang). Falls back
+// to "References". Pass `title:` to override.
+#let _bib-titles = (
+  en: "References", da: "Referencer", de: "Literatur", fr: "Références",
+  es: "Referencias", sv: "Referenser", nb: "Referanser", nn: "Referansar", nl: "Literatuur",
+)
+#let bibliography-custom(brief: false, new-page: true, title: auto) = context {
   let store = _store.get()
   if new-page { pagebreak(weak: true) }
-  heading(level: 1, numbering: none)[References]
+  let header = if title != auto { title } else { _bib-titles.at(text.lang, default: "References") }
+  heading(level: 1, numbering: none)[#header]
   v(0.3em)
   line(length: 4em, stroke: 0.6pt + black)
   v(0.6em)
   let groups = _group-sources(store)
-  // order docs by their d-index (= file order, stable & predictable)
-  let prefixes = groups.keys().sorted(key: p => store.doc-indices.at(p))
+  // appearance-order index maps (cited order, then any uncited in file order)
+  let di = _doc-index-map(store, _cited-docs.final())
+  let qi = _quote-index-map(store, _cited-quotes.final())
+  // order docs by their d-index (= order of first appearance in the text)
+  let prefixes = groups.keys().sorted(key: p => di.at(p))
   let marker(content) = box[#text(size: 0.85em, tracking: 0.02em, fill: rgb("#3a3a3a"))[\[#content\]]]
+  // Bibliography markers follow the inline cite style:
+  //   full  → [d1] / [q1]   brief → [d1] / [1]   short → [1] / [a]
+  let style = _resolve-style(store)
+  let dmark(n) = if style == "short" { marker[#n] } else { marker[d#n] }
+  let qmark(n) = if style == "short" { marker[#numbering("a", n)] } else if style == "brief" { marker[#n] } else { marker[q#n] }
 
   for prefix in prefixes {
     let aliases = groups.at(prefix)
@@ -543,7 +662,7 @@
     let s = store.sources.at(canon-key)
     let author = s.author
     if author.ends-with(".") { author = author.slice(0, -1) }
-    let d-idx = store.doc-indices.at(prefix)
+    let d-idx = di.at(prefix)
     // Title: use canon's title if :main exists; else fall back to parent.title (container)
     let doc-title = if has-main { s.title } else if s.container != none { s.container } else { s.title }
     // Label: :main key if exists; else prefix-only synthetic label (avoids collision with quote sub-entries)
@@ -553,7 +672,7 @@
     block(below: 0.35em)[
       #set par(hanging-indent: 2.4em, justify: false, leading: 0.55em)
       #text(size: 0.95em)[
-        #marker[d#d-idx]#h(0.6em)#smallcaps(author).#h(0.3em)\(#s.year\).#h(0.3em)#emph(doc-title).#if s.publisher != none [#h(0.3em)#(s.publisher).]#if s.doi != none [#h(0.3em)DOI:~#link("https://doi.org/" + s.doi)[#s.doi].]
+        #dmark(d-idx)#h(0.6em)#smallcaps(author).#h(0.3em)\(#s.year\).#h(0.3em)#emph(doc-title).#if s.publisher != none [#h(0.3em)#(s.publisher).]#if s.doi != none [#h(0.3em)DOI:~#link("https://doi.org/" + s.doi)[#s.doi].]
       ]
       #box(width: 0pt)[]#label(doc-label)
     ]
@@ -567,31 +686,31 @@
 
     // ---- quote sub-entries (ordered by q-index) ----
     let quote-keys = aliases
-      .filter(k => k in store.quote-indices)
-      .sorted(key: k => store.quote-indices.at(k))
+      .filter(k => k in qi)
+      .sorted(key: k => qi.at(k))
     if brief {
       // compact: one row of [q#] markers (with pins), each anchoring its key.
       if quote-keys.len() > 0 {
         block(below: 0.6em, inset: (left: 2.4em))[
           #set par(justify: false, leading: 0.55em)
           #for (i, qk) in quote-keys.enumerate() {
-            let q-idx = store.quote-indices.at(qk)
+            let q-idx = qi.at(qk)
             let pin = store.sources.at(qk).at("pin", default: none)
-            [#marker[q#q-idx]#if pin != none [#text(size: 0.78em, fill: rgb("#7a7a7a"))[~(#pin)]]#box(width: 0pt)[]#label(qk)#if i < quote-keys.len() - 1 [#h(0.6em)]]
+            [#qmark(q-idx)#if pin != none [#text(size: 0.78em, fill: rgb("#7a7a7a"))[~(#pin)]]#box(width: 0pt)[]#label(qk)#if i < quote-keys.len() - 1 [#h(0.6em)]]
           }
         ]
       }
     } else {
       for qk in quote-keys {
         let qs = store.sources.at(qk)
-        let q-idx = store.quote-indices.at(qk)
+        let q-idx = qi.at(qk)
         let pin = qs.at("pin", default: none)
         block(below: 1.1em, inset: (left: 2em))[
           #set par(hanging-indent: 2.4em, justify: false, leading: 0.55em)
           #let slices = _slices.get().at(qk, default: ())
           #let rendered = _render-with-emph(qs.title, slices)
           #text(size: 0.88em)[
-            #marker[q#q-idx]#h(0.6em)"#rendered"#if pin != none [#h(0.4em)#text(fill: rgb("#7a7a7a"))[(#pin)]]
+            #qmark(q-idx)#h(0.6em)"#rendered"#if pin != none [#h(0.4em)#text(fill: rgb("#7a7a7a"))[(#pin)]]
           ]
           #box(width: 0pt)[]#label(qk)
         ]

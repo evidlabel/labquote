@@ -21,8 +21,19 @@ The bibliography is Typst-native compatible: the same `refs.yml` also works with
 - `<doc>:<slug>` — an individual quote drawn from that document; its `title`
   field holds the exact quoted text.
 
-Documents are numbered `d1, d2, …` in file order; quotes within a document are
-numbered `q1, q2, …`. Inline cites render as `[d2, q1]` and link to the back page.
+Documents are numbered `d1, d2, …` in order of first appearance in the text;
+quotes within a document are numbered `q1, q2, …` (also by appearance). Inline
+cites render as `[d2, q1]` and link to the back page; the bibliography is ordered
+to match. Set the inline format with `cite-style` on `setup`:
+
+- `"full"` (default) → `[d2, q1]`
+- `"brief"` → `[d2,1]` (bibliography quote markers become `[1]`, `[2]`)
+- `"short"` → `[2a]` (doc number + quote letter; bibliography uses `[2]` / `[a]`)
+
+(`cite-brief: true` is a legacy alias for `cite-style: "brief"`.)
+
+`multicite((k1, k2, …))` puts several cites in one pair of brackets —
+e.g. `[2a,2b,3a]` in short style.
 
 ## Usage
 
@@ -54,7 +65,7 @@ Legal back-reference to the last cite: #id(pin: "¶ 4").
   - `"fill"` — filled background panel, attribution top-right.
 - `cite-ref(key, pin: …)` — bare inline `[d, q]` cite, clickable to the bibliography.
 - `id(pin: …)` — legal `Id.`, auto-tracking the most recent cite.
-- `bibliography-custom(brief: false, new-page: true)` — styled References back page, grouping quotes under their source and italicising the slices actually quoted in the text. Pass `brief: true` to keep the document (`d`) entries but list the quote (`q`) items as a compact inline row of clickable markers (with pins), without repeating each quote's text. Pass `new-page: false` to drop the leading page break so the references flow directly after the body (used in `template/main.typ` to keep the demo on one page).
+- `bibliography-custom(brief: false, new-page: true)` — styled References back page, grouping quotes under their source and italicising the slices actually quoted in the text. Pass `brief: true` to keep the document (`d`) entries but list the quote (`q`) items as a compact inline row of clickable markers (with pins), without repeating each quote's text. Pass `new-page: false` to drop the leading page break so the references flow directly after the body (used in `template/main.typ` to keep the demo on one page). The heading localises by document language (`text.lang`, e.g. `da` → "Referencer"); pass `title:` to override.
 
 ## Local install
 
