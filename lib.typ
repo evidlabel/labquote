@@ -10,10 +10,12 @@
 //
 // numbering: d/q indices are assigned in ORDER OF APPEARANCE in the rendered
 //   text (first cite-ref/q/blockq of a doc → d1, next new doc → d2, …); the
-//   bibliography is ordered to match. Uncited entries (if any) follow in file
-//   order. Never hand-assign d/q numbers.
+//   bibliography is ordered to match. Only entries actually cited in the text
+//   are printed — uncited docs/quotes in the bib data are omitted. Never
+//   hand-assign d/q numbers.
 //
 //   #q("key", pin: "p. 42")[exact text]
+//   #inlineq("key", mark: ("brace", "italic"))  inline quote + superscript cite
 //   #blockq("key", pin: "¶ 17")[body]
 //   #cite-ref("key", pin: "…")          bare inline cite
 //   #multicite(("k1","k2"))             several cites in one bracket: [1a,1b]
@@ -336,6 +338,9 @@
 // [d1, q1; d2, q1] in full/brief. Each token links to its own bib anchor.
 // `keys`: an array of keys, e.g. #multicite(("0157:a", "0157:b", "0301:a")).
 #let multicite(keys, pin: none) = {
+  // Accept a bare string (single key) as well as an array — `("k")` is a
+  // parenthesised string in Typst, not a 1-tuple, so this avoids a footgun.
+  let keys = if type(keys) == str { (keys,) } else { keys }
   for k in keys { _register(k) }
   if keys.len() > 0 { _last-cite.update(keys.last()) }
   context {
@@ -514,6 +519,65 @@
   cite-ref(key, pin: pin)
 }
 
+// Visually distinguish an inline quote body. `mark` is a single token or an
+// array of tokens that compose:
+//   wrapper (pick one; default "quote") —
+//     "quote"  → "…" typographic quotation marks (default)
+//     "brace"  → { … } curly braces
+//     "plain"  → no surrounding marks (use with a text treatment below)
+//   text treatment (any combination, layered) —
+//     "italic" · "underline" · "color" (a slight blue tint)
+//   modifier —
+//     "ellipsis" → a leading "… " to signal the quote opens mid-sentence
+// e.g. mark: "italic" · mark: ("brace", "color") · mark: ("plain", "underline", "ellipsis")
+#let _distinguish(body, mark) = {
+  let marks = if mark == none { ("quote",) } else if type(mark) == str { (mark,) } else { mark }
+  // layered text treatments
+  let content = body
+  if "italic" in marks { content = emph(content) }
+  if "underline" in marks { content = underline(content) }
+  if "color" in marks { content = text(fill: rgb("#2a4a7a"), content) }
+  // leading ellipsis (mid-sentence opener)
+  let lead = if "ellipsis" in marks { [… ] } else { [] }
+  let inner = [#lead#content]
+  // wrapper — quotes by default; "plain" or "brace" opt out / swap
+  if "brace" in marks { [{#inner}] }
+  else if "plain" in marks or "none" in marks { inner }
+  else { ["#inner"] }
+}
+
+// ---------- INLINE QUOTE WITH SUPERSCRIPT ----------
+// Like #q, but the quote reads as part of the running sentence and the citation
+// trails as a single clickable SUPERSCRIPT carrying author · year · d/q index
+// (· pin) — unobtrusive, footnote-style, instead of #q's bracketed [d1, q2].
+// #inlineq("key")                          full entry text, inline
+// #inlineq("key", start: "X", end: "Y")    sliced (same idiom as #q)
+// #inlineq("key")[explicit body]           explicit body
+// #inlineq("key", accent: …)               inline accents (same as #q)
+// #inlineq("key", pin: "p. 5")             pin appended inside the superscript
+// #inlineq("key", mark: ("brace", "italic"))  distinguish the quote (see _distinguish)
+#let inlineq(key, ..args) = {
+  _record-slice(key, args.named().at("start", default: none), args.named().at("end", default: none))
+  _last-cite.update(key)
+  _register(key)
+  let pin = args.named().at("pin", default: none)
+  let mark = args.named().at("mark", default: none)
+  context {
+    let store = _store.get()
+    let body = _resolve-body(store, key, args)
+    let s = store.sources.at(key)
+    let p = _pin(store, key, pin)
+    let has-url = s.url != none
+    _distinguish(body, mark)
+    // The whole attribution (author · year · d/q ref · pin · ↗) trails the quote
+    // as a single clickable superscript pointing at the back-page entry. Wrapped
+    // in one box so the link annotation is a single rectangle whose height
+    // covers the raised superscript (otherwise the per-run link rect sits at the
+    // baseline, below the superscript glyphs).
+    link(label(key), box(super(text(tracking: 0.02em, fill: rgb("#3a3a3a"))[#smallcaps(_last-name(s.author))#h(0.3em)#s.year#h(0.3em)#sym.dot.c#h(0.3em)#_dq(store, key)#if p != none [#h(0.3em)#sym.dot.c#h(0.3em)#p]#if has-url [#h(0.25em)#text(fill: rgb("#2a4a7a"))[↗]]])))
+  }
+}
+
 // ---------- BLOCK QUOTE ----------
 // style: "bracket" (top + left rule, the default), "box" (full border) or
 //   "fill" (filled background). Defaults to the document-wide value set in
@@ -644,10 +708,13 @@
   v(0.6em)
   let groups = _group-sources(store)
   // appearance-order index maps (cited order, then any uncited in file order)
-  let di = _doc-index-map(store, _cited-docs.final())
-  let qi = _quote-index-map(store, _cited-quotes.final())
-  // order docs by their d-index (= order of first appearance in the text)
-  let prefixes = groups.keys().sorted(key: p => di.at(p))
+  let cited-docs = _cited-docs.final()
+  let cited-quotes = _cited-quotes.final()
+  let di = _doc-index-map(store, cited-docs)
+  let qi = _quote-index-map(store, cited-quotes)
+  // Only print docs actually cited in the text, ordered by d-index (= order of
+  // first appearance). Uncited entries present in the bib data are omitted.
+  let prefixes = groups.keys().filter(p => p in cited-docs).sorted(key: p => di.at(p))
   let marker(content) = box[#text(size: 0.85em, tracking: 0.02em, fill: rgb("#3a3a3a"))[\[#content\]]]
   // Bibliography markers follow the inline cite style:
   //   full  → [d1] / [q1]   brief → [d1] / [1]   short → [1] / [a]
@@ -684,9 +751,9 @@
       ]
     }
 
-    // ---- quote sub-entries (ordered by q-index) ----
+    // ---- quote sub-entries (only cited quotes, ordered by q-index) ----
     let quote-keys = aliases
-      .filter(k => k in qi)
+      .filter(k => k in cited-quotes)
       .sorted(key: k => qi.at(k))
     if brief {
       // compact: one row of [q#] markers (with pins), each anchoring its key.

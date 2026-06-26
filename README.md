@@ -58,7 +58,8 @@ Legal back-reference to the last cite: #id(pin: "¶ 4").
 
 - `setup(data, blockquote-indent: 1em, blockquote-style: "bracket")` — register a Hayagriva YAML dict (from `yaml("refs.yml")`). Call once, near the top. `blockquote-indent` sets the left inset of block quotes from the margin; `blockquote-style` sets their default look (see `blockq` below).
 - `setup-bib(src, blockquote-indent: 1em, blockquote-style: "bracket")` — register a biblatex string instead (from `read("refs.bib")`).
-- `q(key, ..)` — inline quote. Full entry text by default; slice with `start:`/`end:`; or pass an explicit `[body]`. Optional `pin:`.
+- `q(key, ..)` — inline quote. Full entry text by default; slice with `start:`/`end:`; or pass an explicit `[body]`. Optional `pin:`. Trails a bracketed `[d, q]` cite.
+- `inlineq(key, .., mark: …)` — inline quote that reads as part of the sentence, trailing the whole attribution (author · year · `d/q` ref · pin · ↗) as a single clickable **superscript** into the bibliography, instead of `q`'s `[d, q]` bracket. Slices/`pin:`/`accent:` work as in `q`. `mark:` distinguishes the quoted text — a token or array combining a wrapper (`"quote"` default · `"brace"` · `"plain"`), text treatments (`"italic"` · `"underline"` · `"color"`), and `"ellipsis"` for a leading `…`, e.g. `mark: ("brace", "italic")`.
 - `blockq(key, .., style: …)` — block quote carrying author · year · pin · `[d, q]` · link. The `style:` argument (default from `setup`) picks the frame:
   - `"bracket"` — top hairline + left rule, attribution on the top edge (the default).
   - `"box"` — full border around the quote, attribution top-right.

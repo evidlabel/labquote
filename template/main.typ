@@ -33,4 +33,6 @@
 
 #lorem(8) — see #id(pin: "p. 8"). Inline quote: #q("0001:amet", start: "Excepteur sint", end: "non proident", pin: "p. 2")
 
+#lorem(6) — inline + superscript: #inlineq("0002:perspiciatis", start: "totam rem aperiam", end: "dicta sunt explicabo.", mark: ("brace", "italic"))
+
 #bibliography-custom(new-page: false)
