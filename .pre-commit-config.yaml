@@ -1,0 +1,25 @@
+# pre-commit hooks — typst build + lint sequence for labquote.
+# typst (0.13.x) has no separate `check`/`fmt`; `typst compile` is the lint.
+repos:
+  - repo: local
+    hooks:
+      # sync the working tree into the local package cache so template/main.typ
+      # (which imports "@preview/labquote:0.1.0") tests THIS lib.typ, not a
+      # stale cached copy.
+      - id: labquote-local-install
+        name: sync local typst package cache (local_install.sh install)
+        entry: ./local_install.sh
+        args: [install]
+        language: system
+        pass_filenames: false
+        files: \.(typ|yml|yaml|bib|toml)$
+
+      # build + lint: compiles the demo through the package import — exercises
+      # lib.typ end-to-end (setup, q/inlineq/blockq/multicite/id, bibliography).
+      - id: labquote-typst-compile
+        name: typst compile template/main.typ (build + lint)
+        entry: typst
+        args: [compile, --root, ., template/main.typ, /tmp/opencode/labquote-main.pdf]
+        language: system
+        pass_filenames: false
+        files: \.(typ|yml|yaml|bib|toml)$
