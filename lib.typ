@@ -19,19 +19,21 @@
 //   #blockq("key", pin: "¶ 17")[body]
 //   #cite-ref("key", pin: "…")          bare inline cite
 //   #multicite(("k1","k2"))             several cites in one bracket: [1a,1b]
+//   #multicite(("k1","k2"), mode: "dash")
+//                                       adjacent same-doc cites dash-joined:
+//                                       [1a-b] instead of [1a,1b]
 //   #id(pin: "…")                       legal Id. (auto-tracks last cite)
 //   #bibliography-custom()              styled back-page
 //
-// design intent — two complementary surfaces for one quote:
-//   • bibliography (back-page): convenience for the LARGER CONTEXT. It reprints
-//     the whole stored passage and italicises the in-text slice, so a reader can
-//     confirm the quotation is faithful WITHOUT leaving the document. Gather
-//     generously into the entry so the full passage settles any out-of-context
+// design intent — three nested contexts for one quote:
+//   • in-text (blockquote / inline): only the snippet that supports the local
+//     point. Slice with start:/end:; accent: for load-bearing words.
+//   • bibliography (back-page): a bit WIDER CONTEXT. Reprints the stored
+//     title: and italicises the in-text slice, plus the :main URL, so a reader
+//     can confirm the quotation is faithful WITHOUT leaving the document.
+//     Gather generously into the entry so the passage settles out-of-context
 //     doubt on the page.
-//   • blockquote / inline (in-text): convenience for READABILITY. Slice with
-//     start:/end: down to only what serves the local point, and use accent:
-//     to highlight the load-bearing words inline. The back-page holds the
-//     context; the in-text quote stays short and pointed.
+//   • URL: the widest context — the full document at the :main url.
 // =============================================================
 
 // ---------- SHARED HELPERS ----------
@@ -45,9 +47,13 @@
 }
 
 // ---------- HAYAGRIVA NORMALISERS ----------
+// Placeholder for a source with no author. Never "Anon.", which reads as a
+// real surname in the bibliography and in inline cites.
+#let _no-author = "[no_author]"
+
 #let _norm-author(a) = {
   if type(a) == array {
-    if a.len() == 0 { return "Anon." }
+    if a.len() == 0 { return _no-author }
     return _norm-author(a.at(0))
   }
   if type(a) == dictionary {
@@ -109,7 +115,7 @@
   let out = (:)
   for (key, entry) in raw {
     out.insert(str(key), (
-      author: _norm-author(entry.at("author", default: "Anon.")),
+      author: _norm-author(entry.at("author", default: _no-author)),
       // collapse hard line-wrap whitespace from PDF/text extraction so quote
       // bodies reflow (mirrors the .bib path's ws-rx normalisation)
       title: entry.at("title", default: "").replace(regex("\s+"), " ").trim(),
@@ -153,7 +159,7 @@
     let date = e.at("date", default: e.at("year", default: ""))
     let year = if date.len() >= 4 { date.slice(0, 4) } else { date }
     out.insert(key, (
-      author: e.at("author", default: "Anon."),
+      author: e.at("author", default: _no-author),
       title: e.at("title", default: ""),
       year: year,
       publisher: e.at("publisher", default: none),
@@ -269,9 +275,21 @@
 #let setup-bib(src, blockquote-indent: 1em, blockquote-style: "bracket", cite-brief: false, cite-style: auto) = _store.update(_build(_normalize-bib(src), blockquote-indent, blockquote-style, cite-brief, cite-style))
 
 // ---------- INTERNALS ----------
+// Corporate/legal-form tokens that are not a usable short name on their own.
+#let _org-suffixes = (
+  "a/s", "aps", "ivs", "i/s", "k/s", "ltd", "llc", "inc", "gmbh", "ag",
+  "ab", "as", "oy", "oyj", "sa", "bv", "nv", "plc", "co", "corp",
+)
 #let _last-name(author) = {
-  if author.contains(",") { author.split(",").at(0).trim() }
-  else { author.split(" ").last() }
+  if author.contains(",") { return author.split(",").at(0).trim() }
+  let toks = author.split(" ").filter(t => t != "")
+  if toks.len() == 0 { return author }
+  let tail = lower(toks.last()).replace(".", "")
+  // "Northwind Supplies A/S" -> "Northwind Supplies", not "A/S".
+  if tail in _org-suffixes and toks.len() > 1 {
+    return toks.slice(0, toks.len() - 1).join(" ")
+  }
+  toks.last()
 }
 #let _last-cite = state("_last-cite-key", none)
 
@@ -337,18 +355,77 @@
 // One pair of brackets around several cites: [1a,1b,2a] (short), or
 // [d1, q1; d2, q1] in full/brief. Each token links to its own bib anchor.
 // `keys`: an array of keys, e.g. #multicite(("0157:a", "0157:b", "0301:a")).
-#let multicite(keys, pin: none) = {
+// mode: "list" (default) → every cite separated by the style's separator.
+//       "dash"            → runs of *adjacent* same-doc cites (same prefix and
+//                           consecutive quote indices) are joined with "-" so
+//                           several quotes from one document stay brief inline:
+//                           #multicite(("0157:a", "0157:b", "0301:a"), mode: "dash")
+//                           → short [1a-b, 2a] · brief [d1,1-2] · full [d1, q1-2]
+//                           Non-consecutive same-doc quotes stay separate tokens
+//                           ([1a, 1c]); keys without a quote index (:main) render
+//                           as plain doc cites and break adjacency. Each run
+//                           links to its first key; register order is unchanged.
+#let multicite(keys, pin: none, mode: "list") = {
   // Accept a bare string (single key) as well as an array — `("k")` is a
   // parenthesised string in Typst, not a 1-tuple, so this avoids a footgun.
   let keys = if type(keys) == str { (keys,) } else { keys }
   for k in keys { _register(k) }
   if keys.len() > 0 { _last-cite.update(keys.last()) }
+  if mode != "dash" {
+    context {
+      let store = _store.get()
+      // short style is unambiguous with "," ; full/brief tokens already contain
+      // commas, so separate those with "; " instead.
+      let sep = if _resolve-style(store) == "short" { ", " } else { "; " }
+      let toks = keys.map(k => link(label(k))[#_dq(store, k)])
+      text(size: 0.85em, tracking: 0.02em)[\[#toks.join(sep)#if pin != none [: #pin]\]]
+    }
+    return
+  }
+  // dash mode: split the keys into runs of *adjacent* cites from the same doc
+  // (same prefix AND consecutive quote indices), then join each run's
+  // quote-index tails with "-". Keys without a quote index (:main) render as
+  // plain doc cites and break adjacency.
   context {
     let store = _store.get()
-    // short style is unambiguous with "," ; full/brief tokens already contain
-    // commas, so separate those with "; " instead.
-    let sep = if _resolve-style(store) == "short" { "," } else { "; " }
-    let toks = keys.map(k => link(label(k))[#_dq(store, k)])
+    let style = _resolve-style(store)
+    let di = _doc-index-map(store, _cited-docs.final())
+    let qi = _quote-index-map(store, _cited-quotes.final())
+    let tail(k) = if k in qi { qi.at(k) } else { none }
+    // split into runs
+    let runs = ()
+    for k in keys {
+      let prefix = k.split(":").at(0)
+      let t = tail(k)
+      let brk = runs.len() == 0
+      if not brk {
+        let prev = runs.last()
+        brk = prev.prefix != prefix or prev.last-tail == none or t == none or t != prev.last-tail + 1
+      }
+      if brk { runs.push((prefix: prefix, keys: (k,), last-tail: t)) }
+      else {
+        runs.last().keys.push(k)
+        runs.last().last-tail = t
+      }
+    }
+    // render one token per run
+    let tailstr(k) = if style == "short" { numbering("a", qi.at(k)) } else { str(qi.at(k)) }
+    let toks = runs.map(r => {
+      let first = r.keys.first()
+      if r.keys.len() == 1 { return link(label(first))[#_dq(store, first)] }
+      // multi-key run: doc part + dash-joined tails, formatted per style
+      let d = di.at(r.prefix)
+      let tails = r.keys.map(tailstr).join("-")
+      let body = if style == "short" {
+        [#d#tails]
+      } else if style == "brief" {
+        [d#d,#tails]
+      } else {
+        [d#d, q#tails]
+      }
+      link(label(first))[#body]
+    })
+    let sep = if style == "short" { ", " } else { "; " }
     text(size: 0.85em, tracking: 0.02em)[\[#toks.join(sep)#if pin != none [: #pin]\]]
   }
 }
@@ -704,7 +781,7 @@
   let header = if title != auto { title } else { _bib-titles.at(text.lang, default: "References") }
   heading(level: 1, numbering: none)[#header]
   v(0.3em)
-  line(length: 4em, stroke: 0.6pt + black)
+  line(length: 100%, stroke: 0.6pt + black)
   v(0.6em)
   let groups = _group-sources(store)
   // appearance-order index maps (cited order, then any uncited in file order)
