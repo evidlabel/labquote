@@ -280,16 +280,65 @@
   "a/s", "aps", "ivs", "i/s", "k/s", "ltd", "llc", "inc", "gmbh", "ag",
   "ab", "as", "oy", "oyj", "sa", "bv", "nv", "plc", "co", "corp",
 )
-#let _last-name(author) = {
-  if author.contains(",") { return author.split(",").at(0).trim() }
-  let toks = author.split(" ").filter(t => t != "")
-  if toks.len() == 0 { return author }
+// Lowercase words that mark a name as an institution, not a person:
+// "UN Committee on the Rights of the Child", "Sveriges riksdag".
+#let _org-words = (
+  "of", "on", "the", "for", "and", "af", "for", "og", "om", "til", "i",
+  "för", "och", "på", "des", "du", "für", "der", "und",
+)
+// Stems that mark a capitalised name as an institution: "Folketingets Ombudsmand".
+#let _org-stems = (
+  "committee", "komit", "ombuds", "riksdag", "folketing", "ministe", "styrelse",
+  "council", "association", "institut", "forening", "förening", "agency",
+  "court", "domstol", "rigsadvokat", "kommune", "kommun", "authority",
+  "myndighed", "myndighet", "nations", "centre", "center",
+)
+// Surname particles kept with the surname: "Celine van Golde" -> "van Golde".
+#let _particles = ("van", "von", "de", "der", "den", "da", "di", "du", "la", "le")
+#let _is-org(name) = {
+  let toks = name.split(" ").filter(t => t != "")
+  if toks.len() < 2 { return false }
+  let low = lower(name)
+  if upper(name) == name and toks.len() > 2 { return true }
+  if toks.slice(1).any(t => t in _org-words or (lower(t) == t and t not in _particles)) { return true }
+  _org-stems.any(s => low.contains(s))
+}
+// Short name of one person or institution.
+#let _one-name(name) = {
+  let name = name.trim()
+  let toks = name.split(" ").filter(t => t != "")
+  if toks.len() == 0 { return name }
   let tail = lower(toks.last()).replace(".", "")
   // "Northwind Supplies A/S" -> "Northwind Supplies", not "A/S".
   if tail in _org-suffixes and toks.len() > 1 {
     return toks.slice(0, toks.len() - 1).join(" ")
   }
+  if _is-org(name) { return name }
+  // "Korkman, J." (Hayagriva inverted form) -> "Korkman".
+  if name.contains(",") { return name.split(",").at(0).trim() }
+  let i = toks.position(t => t in _particles)
+  if i != none and i > 0 { return toks.slice(i).join(" ") }
   toks.last()
+}
+// Header name for an author string. Handles one person or institution,
+// "Family, Given" (Hayagriva), "A and B and C" (evid), and "First Last,
+// First Last and First Last" lists; several authors become "A & B" or "A et al.".
+#let _last-name(author) = {
+  let names = author.split(" and ").map(n => n.trim()).filter(n => n != "")
+  if names.len() == 0 { return author }
+  // "Henry Otgaar, Charlotte Bücken" is a list, "Korkman, J." is one inverted name.
+  let first = names.at(0)
+  if first.contains(",") {
+    let parts = first.split(",").map(p => p.trim()).filter(p => p != "")
+    let head = parts.at(0).split(" ").filter(t => t != "")
+    if head.len() > 1 and not _is-org(parts.at(0)) {
+      names = parts + names.slice(1)
+    }
+  }
+  let lead = _one-name(names.at(0))
+  if names.len() == 1 { return lead }
+  if names.len() == 2 { return lead + " & " + _one-name(names.at(1)) }
+  lead + " et al."
 }
 #let _last-cite = state("_last-cite-key", none)
 
