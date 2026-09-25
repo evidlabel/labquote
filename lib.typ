@@ -300,6 +300,9 @@
   if toks.len() < 2 { return false }
   let low = lower(name)
   if upper(name) == name and toks.len() > 2 { return true }
+  // Leading acronym: "SVT Nyheter", "DR Nyheder", "UN Women".
+  let t0 = toks.at(0)
+  if t0.len() >= 2 and upper(t0) == t0 and t0.match(regex("^\p{Lu}+$")) != none { return true }
   if toks.slice(1).any(t => t in _org-words or (lower(t) == t and t not in _particles)) { return true }
   _org-stems.any(s => low.contains(s))
 }
