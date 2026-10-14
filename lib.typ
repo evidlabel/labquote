@@ -11,7 +11,8 @@
 // numbering: d/q indices are assigned in ORDER OF APPEARANCE in the rendered
 //   text (first cite-ref/q/blockq of a doc → d1, next new doc → d2, …); the
 //   bibliography is ordered to match. Only entries actually cited in the text
-//   are printed — uncited docs/quotes in the bib data are omitted. Never
+//   are printed — uncited docs/quotes in the bib data are omitted (pass
+//   all: true to bibliography-custom for a \nocite{*}). Never
 //   hand-assign d/q numbers.
 //
 //   #q("key", pin: "p. 42")[exact text]
@@ -827,7 +828,7 @@
   en: "References", da: "Referencer", de: "Literatur", fr: "Références",
   es: "Referencias", sv: "Referenser", nb: "Referanser", nn: "Referansar", nl: "Literatuur",
 )
-#let bibliography-custom(brief: false, new-page: true, title: auto) = context {
+#let bibliography-custom(brief: false, new-page: true, title: auto, all: false) = context {
   let store = _store.get()
   if new-page { pagebreak(weak: true) }
   let header = if title != auto { title } else { _bib-titles.at(text.lang, default: "References") }
@@ -842,8 +843,13 @@
   let di = _doc-index-map(store, cited-docs)
   let qi = _quote-index-map(store, cited-quotes)
   // Only print docs actually cited in the text, ordered by d-index (= order of
-  // first appearance). Uncited entries present in the bib data are omitted.
-  let prefixes = groups.keys().filter(p => p in cited-docs).sorted(key: p => di.at(p))
+  // first appearance). Uncited entries present in the bib data are omitted; pass
+  // all: true to print the whole store instead (a \nocite{*}).
+  let prefixes = if all {
+    groups.keys().sorted(key: p => di.at(p))
+  } else {
+    groups.keys().filter(p => p in cited-docs).sorted(key: p => di.at(p))
+  }
   let marker(content) = box[#text(size: 0.85em, tracking: 0.02em, fill: rgb("#3a3a3a"))[\[#content\]]]
   // Bibliography markers follow the inline cite style:
   //   full  → [d1] / [q1]   brief → [d1] / [1]   short → [1] / [a]
@@ -881,8 +887,7 @@
     }
 
     // ---- quote sub-entries (only cited quotes, ordered by q-index) ----
-    let quote-keys = aliases
-      .filter(k => k in cited-quotes)
+    let quote-keys = (if all { aliases.filter(k => k in qi) } else { aliases.filter(k => k in cited-quotes) })
       .sorted(key: k => qi.at(k))
     if brief {
       // compact: one row of [q#] markers (with pins), each anchoring its key.

@@ -8,9 +8,15 @@ YAML file with **namespaced keys**, as produced by [`evid`](https://github.com/e
 The bibliography is Typst-native compatible: the same `refs.yml` also works with
 `#bibliography("refs.yml", style: "chicago-author-date")`.
 
+`#bibliography-custom()` prints only the entries cited in the text — uncited
+entries in the store are omitted, as in BibTeX, so one shared `refs.yml` serves
+every document. Pass `all: true` for the whole store (a `\nocite{*}`).
+
 ![labquote rendered output: block quotes in bracket, box, and fill styles with inline cites and a legal Id. back-reference](preview.png)
 
 *Verbatim quotes carry their attribution and a clickable `[d, q]` cite; the grouped References page collects each quote under its source.*
+
+Three nested contexts: the in-text quote is only the supporting snippet (`start:`/`end:`); References reprints the stored passage (a bit wider, that slice italicised) plus the source URL; the URL is the full document.
 
 ## Namespaced keys
 
