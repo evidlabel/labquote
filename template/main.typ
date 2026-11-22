@@ -1,4 +1,4 @@
-#import "@preview/labquote:0.1.0": *
+#import "@preview/labquote:0.2.0": *
 // dev: #import "../lib.typ": *
 
 // ---------- DOCUMENT DEFAULTS ----------

@@ -4,7 +4,7 @@ repos:
   - repo: local
     hooks:
       # sync the working tree into the local package cache so template/main.typ
-      # (which imports "@preview/labquote:0.1.0") tests THIS lib.typ, not a
+      # (which imports "@preview/labquote:0.2.0") tests THIS lib.typ, not a
       # stale cached copy.
       - id: labquote-local-install
         name: sync local typst package cache (local_install.sh install)

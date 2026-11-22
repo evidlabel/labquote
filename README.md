@@ -44,7 +44,7 @@ e.g. `[2a,2b,3a]` in short style.
 ## Usage
 
 ```typst
-#import "@preview/labquote:0.1.0": *
+#import "@preview/labquote:0.2.0": *
 
 #setup(yaml("refs.yml"))            // hayagriva YAML
 // or: #setup-bib(read("refs.bib")) // biblatex

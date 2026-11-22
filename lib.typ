@@ -3,7 +3,7 @@
 // sources: hayagriva YAML (compatible with Typst native bibliography)
 //          as produced by `evid` with namespaced keys (e.g. "0001:dolor").
 // usage:
-//   #import "@preview/labquote:0.1.0": *
+//   #import "@preview/labquote:0.2.0": *
 //   #setup(yaml("refs.yml"))            // hayagriva YAML
 //   #setup(yaml("refs.yml"), cite-brief: true)  // [d1,2] instead of [d1, q2]
 //   // or: #setup-bib(read("refs.bib")) // biblatex

@@ -3,7 +3,7 @@
 # Script to install or clean the labquote Typst package locally
 
 PACKAGE_NAME="labquote"
-PACKAGE_VERSION="0.1.0"
+PACKAGE_VERSION="0.2.0"
 LOCAL_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/typst/packages/preview/$PACKAGE_NAME/$PACKAGE_VERSION"
 FILES="typst.toml lib.typ README.md LICENSE template"
 
