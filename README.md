@@ -60,6 +60,8 @@ Legal back-reference to the last cite: #id(pin: "¶ 4").
 #bibliography-custom()
 ```
 
+A large store is fine: `refs.yml` can hold thousands of entries. Only the entries a document cites are normalised and numbered, so compile time follows the citations, not the size of the file.
+
 ## Commands
 
 - `setup(data, blockquote-indent: 1em, blockquote-style: "bracket")` — register a Hayagriva YAML dict (from `yaml("refs.yml")`). Call once, near the top. `blockquote-indent` sets the left inset of block quotes from the margin; `blockquote-style` sets their default look (see `blockq` below).
